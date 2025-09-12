@@ -50,9 +50,9 @@ music_queues = {}
 ytdl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
-    'quiet': True,
+    'quiet': False,
     'default_search': 'ytsearch',
-    'cookiefile': 'cookies.txt'
+    # 'cookiefile': 'cookies.txt'
 }
 
 ffmpeg_opts = {
