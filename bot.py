@@ -6,8 +6,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import asyncio
 import os
 from dotenv import load_dotenv
-# from flask import Flask
-# from threading import Thread
+from flask import Flask
+from threading import Thread
 
 # Load environment variables
 load_dotenv()
@@ -16,17 +16,17 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-# # ----- SERVER SETUP USING FLASK -----
-# app = Flask('')
+# ----- SERVER SETUP USING FLASK -----
+app = Flask('')
 
-# @app.route('/')
-# def home():
-#     return "Discord bot is running!"
+@app.route('/')
+def home():
+    return "Discord bot is running!"
 
-# def run_server():
-#     app.run(host='0.0.0.0', port=PORT)
+def run_server():
+    app.run(host='0.0.0.0', port=PORT)
 
-# Thread(target=run_server, daemon=True).start()
+Thread(target=run_server, daemon=True).start()
 
 # ----- DISCORD BOT SETUP -----
 intents = discord.Intents.default()

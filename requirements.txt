@@ -5,3 +5,4 @@ ffmpeg-python
 spotipy
 aiohttp
 python-dotenv
+flask
