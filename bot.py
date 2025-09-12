@@ -190,7 +190,7 @@ async def queue(ctx):
         current = ctx.voice_client.source
         embed.add_field(
             name="\u200b",  # empty field name
-            value=f"▶️ Now Playing: **{current.title}**",
+            value=f"▶️ Now playing: **{current.title}**",
             inline=False
         )
 
