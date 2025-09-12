@@ -32,7 +32,8 @@ ytdl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'default_search': 'ytsearch'
+    'default_search': 'ytsearch',
+    'cookiefile': 'cookies.txt'
 }
 
 ffmpeg_opts = {
@@ -52,9 +53,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None):
         loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+        try:
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+        except Exception:
+            # fallback: search query instead of using the link
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(f"ytsearch:{url}", download=False))
+
         if 'entries' in data:
             data = data['entries'][0]
+
         return cls(discord.FFmpegPCMAudio(data['url'], **ffmpeg_opts), data=data)
 
 

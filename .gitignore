@@ -33,3 +33,5 @@ dist/
 Thumbs.db
 
 .cache
+
+cookies.txt
