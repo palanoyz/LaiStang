@@ -6,8 +6,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import asyncio
 import os
 from dotenv import load_dotenv
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+# from flask import Flask
+# from threading import Thread
 
 # Load environment variables
 load_dotenv()
@@ -16,21 +16,17 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-# ----- SERVER SETUP -----
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Discord bot is running!")
+# # ----- SERVER SETUP USING FLASK -----
+# app = Flask('')
 
-def run_server():
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"Server running on port {PORT}")
-    server.serve_forever()
+# @app.route('/')
+# def home():
+#     return "Discord bot is running!"
 
-threading.Thread(target=run_server, daemon=True).start()
+# def run_server():
+#     app.run(host='0.0.0.0', port=PORT)
 
-
+# Thread(target=run_server, daemon=True).start()
 
 # ----- DISCORD BOT SETUP -----
 intents = discord.Intents.default()
@@ -52,12 +48,7 @@ ytdl_opts = {
     'noplaylist': True,
     'quiet': False,
     'default_search': 'ytsearch',
-    'nocheckcertificate': True,
-    'source_address': '0.0.0.0',
-    'headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
-    },
-    'cookiefile': 'cookies.txt'
+    # 'cookiefile': 'cookies.txt'
 }
 
 ffmpeg_opts = {
@@ -84,18 +75,17 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(f"ytsearch:{url}", download=False))
 
         if 'entries' in data:
+            if not data['entries']:
+                raise ValueError(f"No results found for query: {url}")
             data = data['entries'][0]
 
         return cls(discord.FFmpegPCMAudio(data['url'], **ffmpeg_opts), data=data)
-
 
 
 # ----- BOT EVENTS -----
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
-
-
 
 # ----- HELPER FUNCTIONS -----
 async def ensure_queue(ctx):
@@ -128,8 +118,6 @@ async def play_next(ctx):
     source = queue.pop(0)
     ctx.voice_client.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
     await ctx.send(f"▶️ Now playing -> **{source.title}** ❤️")
-
-
 
 # ----- BOT COMMANDS -----
 @bot.command(aliases=['p'])
@@ -172,8 +160,6 @@ async def play(ctx, *, query=None):
     else:
         await ctx.send(f"✅ Added to queue -> **{source.title}** ❤️")
 
-
-
 @bot.command()
 async def skip(ctx):
     if ctx.voice_client and ctx.voice_client.is_playing():
@@ -181,8 +167,6 @@ async def skip(ctx):
         await ctx.send("📣 Skipped the current song! ⏩")
     else:
         await ctx.send("❌ Nothing is playing!")
-
-
 
 @bot.command()
 async def pause(ctx):
@@ -192,8 +176,6 @@ async def pause(ctx):
     else:
         await ctx.send("❌ Nothing is playing!")
 
-
-
 @bot.command()
 async def resume(ctx):
     if ctx.voice_client and ctx.voice_client.is_paused():
@@ -201,8 +183,6 @@ async def resume(ctx):
         await ctx.send("▶️ Resumed!")
     else:
         await ctx.send("❌ Nothing is paused!")
-
-
 
 @bot.command(aliases=['q'])
 async def queue(ctx):
@@ -244,8 +224,6 @@ async def queue(ctx):
 
     await ctx.send(embed=embed)
 
-
-
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
@@ -257,7 +235,6 @@ async def stop(ctx):
         await ctx.send("🛑 Stopped playback and cleared the queue!")
     else:
         await ctx.send("Nothing is playing!")
-
 
 
 # ----- RUN BOT -----
