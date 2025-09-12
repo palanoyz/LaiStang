@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import yt_dlp
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -24,7 +24,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_secret=SPOTIFY_CLIENT_SECRET
 ))
 
-# Music queue dict: guild_id -> queue
+# Music queue dict: guild_id -> queue, playing status, and auto-leave task
 music_queues = {}
 
 # YTDL options
@@ -57,102 +57,173 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = data['entries'][0]
         return cls(discord.FFmpegPCMAudio(data['url'], **ffmpeg_opts), data=data)
 
+
+
 # ----- BOT EVENTS -----
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
 
-# ----- BOT COMMANDS -----
+
+
+# ----- HELPER FUNCTIONS -----
 async def ensure_queue(ctx):
     if ctx.guild.id not in music_queues:
-        music_queues[ctx.guild.id] = {'queue': [], 'playing': False}
+        music_queues[ctx.guild.id] = {
+            'queue': [],
+            'playing': False,
+            'auto_leave_task': None
+        }
 
-@bot.command()
-async def join(ctx):
-    if ctx.author.voice:
-        channel = ctx.author.voice.channel
-        await channel.connect()
-    else:
-        await ctx.send("You are not in a voice channel!")
-
-@bot.command()
-async def leave(ctx):
-    if ctx.voice_client:
+async def auto_leave_check(ctx):
+    await asyncio.sleep(300) # 5 minutes
+    guild_data = music_queues.get(ctx.guild.id)
+    if guild_data and not guild_data['queue'] and ctx.voice_client and not ctx.voice_client.is_playing():
         await ctx.voice_client.disconnect()
         music_queues.pop(ctx.guild.id, None)
-    else:
-        await ctx.send("I'm not in a voice channel!")
-
-@bot.command()
-async def play(ctx, *, query):
-    await ensure_queue(ctx)
-
-    # If Spotify link, convert to YouTube search
-    if "spotify.com/track" in query:
-        track = sp.track(query)
-        query = f"{track['name']} {track['artists'][0]['name']}"
-
-    # Get audio source
-    source = await YTDLSource.from_url(query)
-    music_queues[ctx.guild.id]['queue'].append(source)
-
-    await ctx.send(f"Added **{source.title}** to the queue!")
-
-    if not music_queues[ctx.guild.id]['playing']:
-        await play_next(ctx)
+        await ctx.send("👋 Left the voice channel due to inactivity.")
 
 async def play_next(ctx):
     queue = music_queues[ctx.guild.id]['queue']
     if not queue:
         music_queues[ctx.guild.id]['playing'] = False
+        # start auto-leave task
+        if music_queues[ctx.guild.id]['auto_leave_task']:
+            music_queues[ctx.guild.id]['auto_leave_task'].cancel()
+        music_queues[ctx.guild.id]['auto_leave_task'] = bot.loop.create_task(auto_leave_check(ctx))
         return
 
     music_queues[ctx.guild.id]['playing'] = True
     source = queue.pop(0)
     ctx.voice_client.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
-    await ctx.send(f"Now playing: **{source.title}**")
+    await ctx.send(f"▶️ Now playing -> **{source.title}** ❤️")
+
+
+
+# ----- BOT COMMANDS -----
+@bot.command(aliases=['p'])
+async def play(ctx, *, query=None):
+    await ensure_queue(ctx)
+
+    # Check if user is in a voice channel
+    if not ctx.author.voice:
+        await ctx.send("📣 You need to join a voice channel first!")
+        return
+
+    # Check if query is empty
+    if not query:
+        await ctx.send("📣 You need to provide a song name or link!")
+        return
+
+    # Auto-join if not connected
+    if not ctx.voice_client:
+        channel = ctx.author.voice.channel
+        await channel.connect()
+    else:
+        # cancel auto-leave if playing
+        guild_data = music_queues[ctx.guild.id]
+        if guild_data['auto_leave_task']:
+            guild_data['auto_leave_task'].cancel()
+            guild_data['auto_leave_task'] = None
+
+    # Handle Spotify link
+    if "spotify.com/track" in query:
+        track = sp.track(query)
+        query = f"{track['name']} {track['artists'][0]['name']}"
+
+    # Get source and add to queue
+    source = await YTDLSource.from_url(query)
+    music_queues[ctx.guild.id]['queue'].append(source)
+
+    # Play if nothing is playing
+    if not music_queues[ctx.guild.id]['playing']:
+        await play_next(ctx)
+    else:
+        await ctx.send(f"✅ Added to queue -> **{source.title}** ❤️")
+
+
 
 @bot.command()
 async def skip(ctx):
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
-        await ctx.send("Skipped the current song!")
+        await ctx.send("📣 Skipped the current song! ⏩")
     else:
-        await ctx.send("Nothing is playing!")
+        await ctx.send("❌ Nothing is playing!")
+
+
 
 @bot.command()
 async def pause(ctx):
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.pause()
-        await ctx.send("Paused!")
+        await ctx.send("⏸️ Paused!")
     else:
-        await ctx.send("Nothing is playing!")
+        await ctx.send("❌ Nothing is playing!")
+
+
 
 @bot.command()
 async def resume(ctx):
     if ctx.voice_client and ctx.voice_client.is_paused():
         ctx.voice_client.resume()
-        await ctx.send("Resumed!")
+        await ctx.send("▶️ Resumed!")
     else:
-        await ctx.send("Nothing is paused!")
+        await ctx.send("❌ Nothing is paused!")
 
-@bot.command()
+
+
+@bot.command(aliases=['q'])
 async def queue(ctx):
     await ensure_queue(ctx)
-    queue_list = music_queues[ctx.guild.id]['queue']
+    guild_data = music_queues[ctx.guild.id]
+    queue_list = guild_data['queue']
+
+    # Create embed
+    embed = discord.Embed(
+        title="🎶 Music Queue",
+        color=discord.Color.blue()
+    )
+
+    # Show current song if playing
+    if guild_data['playing'] and ctx.voice_client and ctx.voice_client.is_playing():
+        current = ctx.voice_client.source
+        embed.add_field(
+            name="\u200b",  # empty field name
+            value=f"▶️ Now Playing: **{current.title}**",
+            inline=False
+        )
+
+    # Show upcoming queue
     if queue_list:
-        msg = "\n".join([f"{i+1}. {song.title}" for i, song in enumerate(queue_list)])
-        await ctx.send(f"**Queue:**\n{msg}")
+        desc = "\n".join([f"{i+1}. {song.title}" for i, song in enumerate(queue_list[:10])])
+        if len(queue_list) > 10:
+            desc += f"\n... and {len(queue_list)-10} more"
+        embed.add_field(
+            name="\u200b",
+            value=f"📋 Up Next:\n{desc}",
+            inline=False
+        )
     else:
-        await ctx.send("Queue is empty.")
+        embed.add_field(
+            name="\u200b",
+            value="Queue is empty.",
+            inline=False
+        )
+
+    await ctx.send(embed=embed)
+
+
 
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         ctx.voice_client.stop()
-        music_queues[ctx.guild.id]['queue'] = []
-        music_queues[ctx.guild.id]['playing'] = False
-        await ctx.send("Stopped playback and cleared the queue!")
+        guild_data = music_queues.get(ctx.guild.id)
+        if guild_data:
+            guild_data['queue'] = []
+            guild_data['playing'] = False
+        await ctx.send("🛑 Stopped playback and cleared the queue!")
     else:
         await ctx.send("Nothing is playing!")
 
