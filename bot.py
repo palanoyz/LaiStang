@@ -6,14 +6,33 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import asyncio
 import os
 from dotenv import load_dotenv
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 
 # Load environment variables
 load_dotenv()
-
+PORT = int(os.getenv("PORT")) or 3000
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
+# ----- SERVER SETUP -----
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Discord bot is running!")
+
+def run_server():
+    server = HTTPServer(("0.0.0.0", PORT), Handler)
+    print(f"Server running on port {PORT}")
+    server.serve_forever()
+
+threading.Thread(target=run_server, daemon=True).start()
+
+
+
+# ----- DISCORD BOT SETUP -----
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -122,7 +141,7 @@ async def play(ctx, *, query=None):
         await ctx.send("📣 You need to provide a song name or link!")
         return
 
-    # Auto-join if not connected
+    # Auto join if not connected
     if not ctx.voice_client:
         channel = ctx.author.voice.channel
         await channel.connect()
@@ -234,4 +253,7 @@ async def stop(ctx):
     else:
         await ctx.send("Nothing is playing!")
 
+
+
+# ----- RUN BOT -----
 bot.run(DISCORD_TOKEN)
