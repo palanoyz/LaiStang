@@ -1,0 +1,7 @@
+discord.py[voice]
+yt_dlp
+PyNaCl
+ffmpeg-python
+spotipy
+aiohttp
+python-dotenv
