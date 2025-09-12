@@ -30,8 +30,6 @@ def run_server():
 
 threading.Thread(target=run_server, daemon=True).start()
 
-
-
 # ----- DISCORD BOT SETUP -----
 intents = discord.Intents.default()
 intents.message_content = True
@@ -52,7 +50,7 @@ ytdl_opts = {
     'noplaylist': True,
     'quiet': False,
     'default_search': 'ytsearch',
-    # 'cookiefile': 'cookies.txt'
+    'cookiefile': 'cookies.txt'
 }
 
 ffmpeg_opts = {
@@ -74,12 +72,18 @@ class YTDLSource(discord.PCMVolumeTransformer):
         loop = loop or asyncio.get_event_loop()
         try:
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
-        except Exception:
+        except Exception as e:
             # fallback: search query instead of using the link
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(f"ytsearch:{url}", download=False))
 
+        # Handle search results safely
         if 'entries' in data:
+            if not data['entries']:
+                raise ValueError(f"No results found for query: {url}")
             data = data['entries'][0]
+
+        if 'url' not in data:
+            raise ValueError(f"Cannot extract audio URL for: {url}. Video might require login/cookies.")
 
         return cls(discord.FFmpegPCMAudio(data['url'], **ffmpeg_opts), data=data)
 
@@ -124,8 +128,6 @@ async def play_next(ctx):
     ctx.voice_client.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
     await ctx.send(f"▶️ Now playing -> **{source.title}** ❤️")
 
-
-
 # ----- BOT COMMANDS -----
 @bot.command(aliases=['p'])
 async def play(ctx, *, query=None):
@@ -158,7 +160,15 @@ async def play(ctx, *, query=None):
         query = f"{track['name']} {track['artists'][0]['name']}"
 
     # Get source and add to queue
-    source = await YTDLSource.from_url(query)
+    try:
+        source = await YTDLSource.from_url(query)
+    except ValueError as e:
+        await print(f"Error: {e}")
+        return
+    except Exception as e:
+        await print(f"Failed to play song. Possibly requires YouTube login/cookies.\n{e}")
+        return
+
     music_queues[ctx.guild.id]['queue'].append(source)
 
     # Play if nothing is playing
