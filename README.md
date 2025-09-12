@@ -7,8 +7,6 @@
 ### Commands
 | Commands         | Description |
 |------------------|-------------|
-| `!join`          | Make the bot join your voice channel |
-| `!leave`         | Make the bot leave the voice channel |
 | `!play <query>`  | Play a YouTube or Spotify track |
 | `!queue`         | Show the current queue |
 | `!skip`          | Skip the currently playing song |
@@ -16,7 +14,7 @@
 | `!resume`        | Resume playback |
 | `!stop`          | Stop playback and clear the queue |
 
-## Run the bot
+## Run the bot (local)
 ```bash
 python bot.py
 ```
