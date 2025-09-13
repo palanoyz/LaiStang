@@ -129,7 +129,6 @@ async def play(ctx, *, query=None):
         await ctx.send("📣 You need to join a voice channel first!")
         return
 
-    # Check if query is empty
     if not query:
         await ctx.send("📣 You need to provide a song name or link!")
         return
@@ -139,26 +138,64 @@ async def play(ctx, *, query=None):
         channel = ctx.author.voice.channel
         await channel.connect()
     else:
-        # cancel auto-leave if playing
         guild_data = music_queues[ctx.guild.id]
         if guild_data['auto_leave_task']:
             guild_data['auto_leave_task'].cancel()
             guild_data['auto_leave_task'] = None
 
-    # Handle Spotify link
+    # Handle Spotify track
     if "spotify.com/track" in query:
         track = sp.track(query)
         query = f"{track['name']} {track['artists'][0]['name']}"
+
+    # If query is not a YouTube link, show top 5 search results
+    if "youtube.com/watch" not in query and "youtu.be" not in query:
+        loop = asyncio.get_event_loop()
+        search_results = await loop.run_in_executor(
+            None,
+            lambda: ytdl.extract_info(f"ytsearch5:{query}", download=False)
+        )
+
+        if 'entries' not in search_results or len(search_results['entries']) == 0:
+            await ctx.send(f"❌ No results found for `{query}`")
+            return
+
+        # Build embed with top 5 results
+        embed = discord.Embed(
+            title=f"🔍 Song selection. Type the song number to continue.",
+            description="Type the number (1-5) of the song you want to play.",
+            color=discord.Color.green()
+        )
+        for i, entry in enumerate(search_results['entries'], start=1):
+            embed.add_field(
+                name=f"{i}. {entry['title']}",
+                value=f"Uploader: {entry.get('uploader', 'Unknown')} | Duration: {entry.get('duration', 0)} sec",
+                inline=False
+            )
+        msg = await ctx.send(embed=embed)
+
+        # Wait for user's choice
+        def check(m):
+            return m.author == ctx.author and m.content.isdigit() and 1 <= int(m.content) <= len(search_results['entries'])
+
+        try:
+            choice_msg = await bot.wait_for('message', check=check, timeout=30)
+            choice = int(choice_msg.content) - 1
+            selected = search_results['entries'][choice]
+            query = selected['webpage_url']
+        except asyncio.TimeoutError:
+            await ctx.send("⌛ Selection timed out. Please try again.")
+            return
 
     # Get source and add to queue
     source = await YTDLSource.from_url(query)
     music_queues[ctx.guild.id]['queue'].append(source)
 
-    # Play if nothing is playing
     if not music_queues[ctx.guild.id]['playing']:
         await play_next(ctx)
     else:
         await ctx.send(f"✅ Added to queue -> **{source.title}** ❤️")
+
 
 @bot.command()
 async def skip(ctx):
