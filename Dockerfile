@@ -1,17 +1,17 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
+# Install system dependencies
 RUN apt-get update && \
-    apt-get install -y ffmpeg git && \
+    apt-get install -y ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
+# Set workdir
+WORKDIR /app
+
+# Copy files
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
-
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
-
-ENV PORT 3000
-EXPOSE 3000
 
 CMD ["python", "bot.py"]

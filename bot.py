@@ -117,7 +117,7 @@ async def play_next(ctx):
     music_queues[ctx.guild.id]['playing'] = True
     source = queue.pop(0)
     ctx.voice_client.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
-    await ctx.send(f"▶️ Now playing -> **{source.title}** ❤️")
+    await ctx.send(f"🎵 Now playing -> **{source.title}** ❤️")
 
 # ----- BOT COMMANDS -----
 @bot.command(aliases=['p'])
