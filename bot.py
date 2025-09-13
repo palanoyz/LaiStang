@@ -49,7 +49,7 @@ ytdl_opts = {
     'noplaylist': True,
     'quiet': False,
     'default_search': 'ytsearch',
-    # 'cookiefile': 'cookies.txt'
+    'cookiefile': 'cookies.txt'
 }
 
 ffmpeg_opts = {
